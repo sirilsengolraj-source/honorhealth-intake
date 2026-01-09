@@ -156,13 +156,13 @@ A digital intake system that:
 
 ## 📝 License
 
-This is a prototype developed for the May's Arizona Global Health Solutions Hackathon. All rights reserved.
+This is a prototype developed for the Arizona Global Health Solutions Hackathon. 
 
 ## 🤝 Acknowledgments
 
 - **HonorHealth** for partnership and clinical insights
 - **Prashant Shah** and UK MedTech Innovations for organizing
-- **May's Arizona Global** for hosting the hackathon
+- ** SkySong Arizona ** for hosting the hackathon
 
 ---
 
@@ -174,4 +174,4 @@ For questions, feedback, or implementation inquiries, please contact the develop
 
 ---
 
-*Built with ❤️ for better healthcare experiences*
+Built with ❤️ for better healthcare experiences
