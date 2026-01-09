@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HonorHealth Urgent Care - Patient Check-In</title>
+    <script>
+        // Suppress Tailwind CDN warning - must run before Tailwind loads
+        (function() {
+            const originalWarn = console.warn;
+            console.warn = function(...args) {
+                const msg = args[0]?.toString() || '';
+                if (msg.includes('cdn.tailwindcss.com') || msg.includes('should not be used in production')) {
+                    return;
+                }
+                originalWarn.apply(console, args);
+            };
+        })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* HonorHealth Brand Colors */
+        :root {
+            --honorhealth-blue: #0066cc;
+            --honorhealth-dark-blue: #004080;
+        }
+        
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 0.5rem;
+            border-bottom: 3px solid #e5e7eb;
+            color: #9ca3af;
+            font-size: 0.875rem;
+        }
+        .step.active {
+            border-bottom-color: var(--honorhealth-blue);
+            color: var(--honorhealth-blue);
+            font-weight: 600;
+        }
+        .step.completed {
+            border-bottom-color: #10b981;
+            color: #10b981;
+        }
+        .honorhealth-blue { color: var(--honorhealth-blue); }
+        .honorhealth-bg { background-color: var(--honorhealth-blue); }
+        .section-card {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .red-flag {
+            background-color: #fef2f2;
+            border-left: 4px solid #ef4444;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        input[type="text"], input[type="tel"], input[type="date"], input[type="number"], input[type="email"],
+        select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--honorhealth-blue);
+            ring: 2px;
+            ring-color: var(--honorhealth-blue);
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #374151;
+        }
+        .btn-primary {
+            background-color: var(--honorhealth-blue);
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            font-size: 1.125rem;
+        }
+        .btn-primary:hover {
+            background-color: var(--honorhealth-dark-blue);
+        }
+        .btn-secondary {
+            background-color: white;
+            color: var(--honorhealth-blue);
+            padding: 0.75rem 2rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            border: 2px solid var(--honorhealth-blue);
+            cursor: pointer;
+            width: 100%;
+            font-size: 1.125rem;
+            margin-top: 0.5rem;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: start;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+        }
+        .checkbox-label input[type="checkbox"] {
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-top: 0.125rem;
+            flex-shrink: 0;
+        }
+        #qrcode canvas {
+            margin: 0 auto;
+            display: block;
+        }
+        .signature-pad {
+            border: 2px solid var(--honorhealth-blue);
+            border-radius: 0.375rem;
+            padding: 1rem;
+            background: white;
+            margin-bottom: 1rem;
+        }
+        .large-text {
+            font-size: 1.125rem;
+        }
+        .expandable-content {
+            display: none;
+            margin-top: 0.5rem;
+            padding-left: 1rem;
+            color: #6b7280;
+            font-size: 0.875rem;
+        }
+        .expandable-content.show {
+            display: block;
+        }
+        .expand-btn {
+            color: var(--honorhealth-blue);
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .file-upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .file-upload-area:hover {
+            border-color: var(--honorhealth-blue);
+            background-color: #f9fafb;
+        }
+        .file-upload-area.has-file {
+            border-color: #10b981;
+            background-color: #f0fdf4;
+        }
+        .file-preview {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f9fafb;
+            border-radius: 0.5rem;
+        }
+        .file-preview img {
+            max-width: 100%;
+            max-height: 200px;
+            object-fit: contain;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        /* HonorHealth Logo */
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .logo-h {
+            font-size: 2.25rem;
+            font-weight: 900;
+            color: var(--honorhealth-blue);
+            font-family: 'Arial Black', sans-serif;
+            line-height: 1;
+        }
+        
+        /* Email Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-2xl mx-auto p-4">
+        <!-- Header -->
+        <div class="bg-white shadow-sm mb-4 p-4 rounded-lg">
+            <div class="flex items-center justify-between">
+                <div class="logo-container">
+                    <div class="logo-h">H</div>
+                    <div>
+                        <h1 class="text-2xl font-bold honorhealth-blue">HonorHealth</h1>
+                        <p class="text-sm text-gray-600">Scottsdale Urgent Care</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <button onclick="toggleLargeText()" class="text-sm text-blue-600 underline">Large Text</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step Indicator -->
+        <div class="step-indicator" id="stepIndicator">
+            <div class="step active" id="step1">Welcome</div>
+            <div class="step" id="step2">Profile</div>
+            <div class="step" id="step3">Documents</div>
+            <div class="step" id="step4">Today's Visit</div>
+            <div class="step" id="step5">Consent</div>
+            <div class="step" id="step6">Complete</div>
+        </div>
+
+        <!-- Step 1: Welcome -->
+        <div id="screen1" class="section-card">
+            <h2 class="text-2xl font-bold mb-4">Welcome to HonorHealth Urgent Care</h2>
+            <p class="text-gray-700 mb-6">Let's get you checked in quickly and safely. This should take about 3-5 minutes.</p>
+            
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <p class="text-sm text-blue-900">
+                    <strong>Your privacy matters:</strong> Your information is encrypted and only shared with your care team.
+                    <span class="expand-btn" onclick="toggleExpand('privacy1')">Learn more</span>
+                </p>
+                <div id="privacy1" class="expandable-content">
+                    We follow HIPAA regulations to protect your health information. Your data is never sold or shared outside your care team without your permission.
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <p class="font-semibold mb-2">Are you:</p>
+                <label class="checkbox-label">
+                    <input type="radio" name="patientType" value="new" checked onchange="handlePatientType()">
+                    <span>New patient or first visit to this location</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="radio" name="patientType" value="returning" onchange="handlePatientType()">
+                    <span>Returning patient (I've been here before)</span>
+                </label>
+            </div>
+
+            <!-- Returning Patient File Upload -->
+            <div id="returningPatientUpload" style="display:none;" class="mb-6 bg-green-50 border border-green-300 rounded p-4">
+                <h3 class="font-semibold text-green-900 mb-3">📄 Upload Your Previous Check-In Form (Optional)</h3>
+                <p class="text-sm text-green-800 mb-3">If you saved your intake form from a previous visit, upload it here to auto-fill your information.</p>
+                
+                <input type="file" id="previousFormUpload" accept=".json" style="display:none;" onchange="loadPreviousForm(event)">
+                <div class="file-upload-area" onclick="document.getElementById('previousFormUpload').click()">
+                    <svg class="w-12 h-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                    <p class="text-sm font-semibold">Click to upload your previous form</p>
+                    <p class="text-xs text-gray-500 mt-1">JSON file from previous visit</p>
+                </div>
+                <div id="previousFormStatus"></div>
+                
+                <div class="mt-3 text-center">
+                    <button onclick="goToStep(2)" class="text-sm honorhealth-blue underline">
+                        Skip and fill out manually →
+                    </button>
+                </div>
+            </div>
+
+            <button class="btn-primary" onclick="goToStep(2)">Start Check-In</button>
+
+            <div class="mt-6 p-4 bg-gray-100 rounded">
+                <p class="text-sm text-gray-700 mb-2"><strong>For Demo:</strong> Try these scenarios:</p>
+                <button onclick="loadDemoPatient(1)" class="text-xs bg-white border border-gray-300 px-3 py-1 rounded mr-2 mb-2">Demo: New Patient</button>
+                <button onclick="loadDemoPatient(2)" class="text-xs bg-white border border-gray-300 px-3 py-1 rounded mr-2 mb-2">Demo: Returning (Minor Injury)</button>
+                <button onclick="loadDemoPatient(3)" class="text-xs bg-white border border-gray-300 px-3 py-1 rounded mr-2 mb-2">Demo: Returning (Flu)</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Baseline Profile -->
+        <div id="screen2" class="section-card" style="display:none;">
+            <h2 class="text-2xl font-bold mb-4">Your Baseline Profile</h2>
+            <p class="text-gray-700 mb-6" id="profileSubtext">We'll save this information for future visits so you don't have to re-enter it.</p>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-lg mb-3">Demographics</h3>
+                
+                <div class="mb-4">
+                    <label for="firstName">First Name *</label>
+                    <input type="text" id="firstName" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="lastName">Last Name *</label>
+                    <input type="text" id="lastName" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="dob">Date of Birth *</label>
+                    <input type="date" id="dob" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="phone">Phone Number *</label>
+                    <input type="tel" id="phone" placeholder="(555) 123-4567" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="email">Email *</label>
+                    <input type="email" id="email" placeholder="your.email@example.com" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="address">Address *</label>
+                    <input type="text" id="address" placeholder="Street address">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="city">City *</label>
+                        <input type="text" id="city" value="Scottsdale">
+                    </div>
+                    <div>
+                        <label for="zipcode">ZIP Code *</label>
+                        <input type="text" id="zipcode" placeholder="85251">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="ethnicity">Ethnicity</label>
+                    <select id="ethnicity">
+                        <option value="">Prefer not to answer</option>
+                        <option value="hispanic">Hispanic or Latino</option>
+                        <option value="not-hispanic">Not Hispanic or Latino</option>
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label for="race">Race (select all that apply)</label>
+                    <div class="space-y-2">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="race" value="american-indian">
+                            <span>American Indian or Alaska Native</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="race" value="asian">
+                            <span>Asian</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="race" value="black">
+                            <span>Black or African American</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="race" value="pacific-islander">
+                            <span>Native Hawaiian or Other Pacific Islander</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="race" value="white">
+                            <span>White</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="race" value="prefer-not">
+                            <span>Prefer not to answer</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-lg mb-3">Emergency Contact</h3>
+                
+                <div class="mb-4">
+                    <label for="emergencyName">Name *</label>
+                    <input type="text" id="emergencyName" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="emergencyPhone">Phone *</label>
+                    <input type="tel" id="emergencyPhone" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="emergencyRelation">Relationship *</label>
+                    <select id="emergencyRelation">
+                        <option value="">Select...</option>
+                        <option value="spouse">Spouse/Partner</option>
+                        <option value="parent">Parent</option>
+                        <option value="child">Child</option>
+                        <option value="sibling">Sibling</option>
+                        <option value="friend">Friend</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-lg mb-3">Medical History</h3>
+                
+                <div class="mb-4">
+                    <label for="allergies">Allergies (medications, foods, environmental)</label>
+                    <textarea id="allergies" rows="3" placeholder="List any allergies, or type 'None'"></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label for="medications">Current Medications</label>
+                    <textarea id="medications" rows="3" placeholder="List all medications you take, including over-the-counter, or type 'None'"></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label for="conditions">Chronic Conditions/Past Medical History</label>
+                    <textarea id="conditions" rows="3" placeholder="Diabetes, high blood pressure, asthma, surgeries, etc., or type 'None'"></textarea>
+                </div>
+            </div>
+
+            <button class="btn-primary" onclick="saveBaselineAndContinue()">Save & Continue</button>
+            <button class="btn-secondary" onclick="goToStep(1)">Back</button>
+        </div>
+
+        <!-- Step 3: Document Uploads -->
+        <div id="screen3" class="section-card" style="display:none;">
+            <h2 class="text-2xl font-bold mb-4">Insurance & Identification</h2>
+            <p class="text-gray-700 mb-6">Please upload photos or scans of your documents for faster check-in.</p>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-lg mb-3">Insurance Card</h3>
+                <p class="text-sm text-gray-600 mb-3">Front and back of your insurance card (if applicable)</p>
+                
+                <div class="mb-4">
+                    <label class="block mb-2">Front of Insurance Card</label>
+                    <input type="file" id="insuranceFront" accept="image/*" style="display:none;" onchange="handleFileUpload(event, 'insuranceFrontPreview', 'insuranceFrontData')">
+                    <div id="insuranceFrontArea" class="file-upload-area" onclick="document.getElementById('insuranceFront').click()">
+                        <svg class="w-12 h-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <p class="text-sm font-semibold">Click to take photo or upload</p>
+                        <p class="text-xs text-gray-500 mt-1">Front of insurance card</p>
+                    </div>
+                    <div id="insuranceFrontPreview" class="file-preview" style="display:none;"></div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block mb-2">Back of Insurance Card</label>
+                    <input type="file" id="insuranceBack" accept="image/*" style="display:none;" onchange="handleFileUpload(event, 'insuranceBackPreview', 'insuranceBackData')">
+                    <div id="insuranceBackArea" class="file-upload-area" onclick="document.getElementById('insuranceBack').click()">
+                        <svg class="w-12 h-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <p class="text-sm font-semibold">Click to take photo or upload</p>
+                        <p class="text-xs text-gray-500 mt-1">Back of insurance card</p>
+                    </div>
+                    <div id="insuranceBackPreview" class="file-preview" style="display:none;"></div>
+                </div>
+
+                <label class="checkbox-label">
+                    <input type="checkbox" id="selfPay">
+                    <span>I am self-pay (no insurance)</span>
+                </label>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-lg mb-3">Driver's License or ID</h3>
+                <p class="text-sm text-gray-600 mb-3">Photo of your government-issued ID for identity verification</p>
+                
+                <input type="file" id="driverLicense" accept="image/*" style="display:none;" onchange="handleFileUpload(event, 'driverLicensePreview', 'driverLicenseData')">
+                <div id="driverLicenseArea" class="file-upload-area" onclick="document.getElementById('driverLicense').click()">
+                    <svg class="w-12 h-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"></path>
+                    </svg>
+                    <p class="text-sm font-semibold">Click to take photo or upload</p>
+                    <p class="text-xs text-gray-500 mt-1">Driver's License or State ID</p>
+                </div>
+                <div id="driverLicensePreview" class="file-preview" style="display:none;"></div>
+            </div>
+
+            <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6">
+                <p class="text-sm text-yellow-900">
+                    <strong>Note:</strong> Documents are optional but help speed up check-in. You can also show physical cards to staff.
+                </p>
+            </div>
+
+            <button class="btn-primary" onclick="goToStep(4)">Continue to Visit Details</button>
+            <button class="btn-secondary" onclick="goToStep(2)">Back</button>
+        </div>
+
+        <!-- Step 4: Today's Visit (Delta Intake) -->
+        <div id="screen4" class="section-card" style="display:none;">
+            <h2 class="text-2xl font-bold mb-4">About Today's Visit</h2>
+            <p class="text-gray-700 mb-6">Tell us what brings you in today.</p>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-lg mb-3">Chief Complaint</h3>
+                
+                <div class="mb-4">
+                    <label for="chiefComplaint">What is the main reason for your visit today? *</label>
+                    <textarea id="chiefComplaint" rows="3" placeholder="E.g., Sprained ankle, fever and cough, rash..." required></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label for="onset">When did this start? *</label>
+                    <select id="onset" required>
+                        <option value="">Select...</option>
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="2-3days">2-3 days ago</option>
+                        <option value="week">About a week ago</option>
+                        <option value="longer">More than a week ago</option>
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label for="painLevel">Pain level (if applicable)</label>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm">No pain</span>
+                        <input type="range" id="painLevel" min="0" max="10" value="0" class="flex-1" onchange="updatePainValue()">
+                        <span class="text-sm">Worst pain</span>
+                        <span id="painValue" class="font-bold ml-2 w-8">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-lg mb-3">Safety Screening</h3>
+                <p class="text-sm text-gray-600 mb-4">Please answer these important questions:</p>
+
+                <div class="red-flag">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="chestPain">
+                        <span>Are you experiencing chest pain or difficulty breathing?</span>
+                    </label>
+
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="severeHeadache">
+                        <span>Do you have a sudden, severe headache?</span>
+                    </label>
+
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="confusion">
+                        <span>Are you confused or having trouble staying awake?</span>
+                    </label>
+
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="bleeding">
+                        <span>Are you bleeding heavily or unable to stop bleeding?</span>
+                    </label>
+
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="pregnant">
+                        <span>Are you pregnant and experiencing complications?</span>
+                    </label>
+                </div>
+
+                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-4">
+                    <p class="text-sm text-yellow-900">
+                        <strong>If you checked any box above:</strong> You may need emergency care. 
+                        Please let our staff know immediately when you arrive, or call 911 if symptoms are severe.
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <label for="fever">Do you have a fever? *</label>
+                    <select id="fever" required>
+                        <option value="no">No</option>
+                        <option value="yes">Yes - Temperature: ______°F</option>
+                        <option value="unknown">I don't know</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="font-semibold text-lg mb-3">Changes Since Last Visit</h3>
+                
+                <div class="mb-4">
+                    <label for="changesMeds">Any new medications or changes to your medications?</label>
+                    <textarea id="changesMeds" rows="2" placeholder="Type 'No changes' or describe any changes"></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label for="changesAllergies">Any new allergies?</label>
+                    <textarea id="changesAllergies" rows="2" placeholder="Type 'No' or describe"></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label for="changesOther">Anything else we should know about today?</label>
+                    <textarea id="changesOther" rows="2" placeholder="Recent surgeries, hospitalizations, travel, new diagnoses..."></textarea>
+                </div>
+            </div>
+
+            <button class="btn-primary" onclick="goToStep(5)">Continue to Consent</button>
+            <button class="btn-secondary" onclick="goToStep(3)">Back</button>
+        </div>
+
+        <!-- Step 5: Consent & Signature -->
+        <div id="screen5" class="section-card" style="display:none;">
+            <h2 class="text-2xl font-bold mb-4">Consent & Authorization</h2>
+            <p class="text-gray-700 mb-6">Please review and sign the following:</p>
+
+            <div class="mb-6">
+                <div class="bg-gray-50 border border-gray-300 rounded p-4 mb-4">
+                    <h3 class="font-semibold mb-2">Treatment Consent</h3>
+                    <p class="text-sm text-gray-700 mb-2">
+                        I consent to medical treatment at HonorHealth Urgent Care. This includes examination, diagnostic tests, and treatment deemed necessary by the provider.
+                        <span class="expand-btn" onclick="toggleExpand('consent1')">Read full text</span>
+                    </p>
+                    <div id="consent1" class="expandable-content">
+                        I understand that the practice of medicine is not an exact science and acknowledge that no guarantees have been made regarding the results of treatments or procedures. I consent to the performance of medical procedures, administration of medications, and provision of services deemed necessary or advisable by HonorHealth providers in the exercise of professional judgment.
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 border border-gray-300 rounded p-4 mb-4">
+                    <h3 class="font-semibold mb-2">Privacy Acknowledgement (HIPAA)</h3>
+                    <p class="text-sm text-gray-700 mb-2">
+                        I acknowledge that I have received HonorHealth's Notice of Privacy Practices, which explains how my health information may be used and disclosed.
+                        <span class="expand-btn" onclick="toggleExpand('consent2')">Read more</span>
+                    </p>
+                    <div id="consent2" class="expandable-content">
+                        The Notice of Privacy Practices describes how medical information about you may be used and disclosed and how you can access this information. You may request a copy at any time. By signing, you acknowledge receipt and understanding of these practices.
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 border border-gray-300 rounded p-4 mb-4">
+                    <h3 class="font-semibold mb-2">Financial Responsibility</h3>
+                    <p class="text-sm text-gray-700 mb-2">
+                        I understand that I am financially responsible for services provided today. Estimated cost: <strong>$150-$400</strong> (varies by services).
+                        <span class="expand-btn" onclick="toggleExpand('consent3')">Billing details</span>
+                    </p>
+                    <div id="consent3" class="expandable-content">
+                        Urgent care visit fees typically range from $150 for simple visits to $400+ for complex cases requiring procedures or extended treatment. Additional costs may include lab tests, X-rays, or medications. We will verify your insurance; you are responsible for copays, deductibles, and non-covered services. Payment is due at time of service or upon receipt of statement.
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="consentCheck" required>
+                    <span><strong>I have read and agree to the above consents and acknowledge my financial responsibility.</strong></span>
+                </label>
+            </div>
+
+            <div class="signature-pad">
+                <h3 class="font-semibold mb-3">Electronic Signature</h3>
+                <p class="text-sm text-gray-600 mb-3">By typing your full name below, you are electronically signing this document. This has the same legal effect as a handwritten signature.</p>
+                
+                <div class="mb-4">
+                    <label for="signatureName">Type your full legal name *</label>
+                    <input type="text" id="signatureName" placeholder="John A. Doe" required>
+                </div>
+
+                <div class="mb-4">
+                    <label>Date: <span id="signatureDate"></span></label>
+                </div>
+
+                <div class="bg-blue-50 p-3 rounded">
+                    <p class="text-xs text-gray-700">
+                        I certify that I am the patient (or authorized representative) and that the information provided is true and accurate to the best of my knowledge. I understand this constitutes a legal electronic signature.
+                    </p>
+                </div>
+            </div>
+
+            <button class="btn-primary" onclick="generateCheckInCode()" id="signBtn" disabled>Sign & Generate Check-In Code</button>
+            <button class="btn-secondary" onclick="goToStep(4)">Back</button>
+        </div>
+
+        <!-- Step 6: Complete - Check-In Code & Actions -->
+        <div id="screen6" class="section-card" style="display:none;">
+            <div class="text-center">
+                <div class="mb-6">
+                    <svg class="w-16 h-16 mx-auto text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+
+                <h2 class="text-2xl font-bold mb-2">Check-In Complete!</h2>
+                <p class="text-gray-700 mb-6">Show this code or QR to the front desk staff.</p>
+
+                <div class="bg-white border-2 border-gray-300 rounded-lg p-6 mb-6">
+                    <div id="qrcode" class="mb-4"></div>
+                    <p class="text-sm text-gray-600 mb-2">Check-In Code:</p>
+                    <p class="text-3xl font-bold honorhealth-blue mb-2" id="checkinCodeDisplay"></p>
+                    <p class="text-xs text-gray-500">Expires in 30 minutes</p>
+                </div>
+
+                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6 text-left">
+                    <p class="text-sm text-yellow-900">
+                        <strong>What happens next:</strong>
+                    </p>
+                    <ol class="text-sm text-yellow-900 ml-4 mt-2 list-decimal">
+                        <li>Show this screen to the front desk when you arrive</li>
+                        <li>They'll verify your identity and review your information</li>
+                        <li>Wait to be called by a medical assistant</li>
+                    </ol>
+                </div>
+
+                <div class="text-left bg-blue-50 p-4 rounded mb-6">
+                    <p class="text-sm font-semibold mb-2">Estimated Wait Time: <span class="honorhealth-blue">15-30 minutes</span></p>
+                    <p class="text-xs text-gray-600">Based on current patient volume</p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="space-y-3 mb-6">
+                    <button class="btn-primary" onclick="downloadFormData()">
+                        📥 Download Your Check-In Form
+                    </button>
+                    
+                    <button class="btn-secondary" onclick="showEmailModal()">
+                        📧 Email Summary to Myself
+                    </button>
+
+                    <button class="btn-secondary" onclick="downloadPDFSummary()">
+                        📄 Download PDF Summary
+                    </button>
+                </div>
+
+                <div class="bg-green-50 border border-green-300 rounded p-4 mb-6 text-left">
+                    <p class="text-sm text-green-900">
+                        <strong>💾 Save Your Form:</strong> Download your check-in form and keep it for your next visit. 
+                        You can upload it to auto-fill your information next time!
+                    </p>
+                </div>
+
+                <button class="btn-secondary" onclick="window.location.reload()">Start New Check-In</button>
+
+                <div class="mt-6">
+                    <a href="clinic.html" target="_blank" class="text-sm text-blue-600 underline">
+                        [Staff Only] Open Clinic Check-In System →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Modal -->
+    <div id="emailModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold mb-4 honorhealth-blue">Email Your Check-In Summary</h3>
+            
+            <div class="mb-4">
+                <label for="emailRecipient" class="block text-sm font-medium mb-2">Email Address</label>
+                <input type="email" id="emailRecipient" class="w-full" placeholder="your.email@example.com">
+            </div>
+
+            <div class="bg-gray-50 p-4 rounded mb-4">
+                <p class="text-sm text-gray-700 mb-2"><strong>What you'll receive:</strong></p>
+                <ul class="text-xs text-gray-600 list-disc ml-4">
+                    <li>Your check-in code and QR code</li>
+                    <li>Visit summary and wait time estimate</li>
+                    <li>Downloadable check-in form (JSON)</li>
+                </ul>
+            </div>
+
+            <div id="emailStatus" class="mb-4" style="display:none;"></div>
+
+            <div class="flex gap-3">
+                <button class="btn-primary" onclick="sendEmailSummary()" id="sendEmailBtn" style="width: auto; flex: 1;">
+                    Send Email
+                </button>
+                <button class="btn-secondary" onclick="closeEmailModal()" style="width: auto; flex: 1; margin-top: 0;">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentStep = 1;
+        let patientData = {
+            type: 'new',
+            baseline: {},
+            documents: {},
+            delta: {},
+            consent: {},
+            redFlags: []
+        };
+
+        // Demo patient scenarios for Scottsdale
+        const demoPatients = {
+            1: {
+                type: 'new',
+                firstName: 'Maria',
+                lastName: 'Rodriguez',
+                dob: '1985-03-15',
+                phone: '(480) 555-1234',
+                email: 'maria.rodriguez@email.com',
+                address: '4521 N Scottsdale Road',
+                city: 'Scottsdale',
+                zipcode: '85251',
+                ethnicity: 'hispanic',
+                race: ['white'],
+                emergencyName: 'Carlos Rodriguez',
+                emergencyPhone: '(480) 555-1235',
+                emergencyRelation: 'spouse',
+                allergies: 'Penicillin, shellfish',
+                medications: 'Lisinopril 10mg daily for blood pressure',
+                conditions: 'Hypertension (controlled), Type 2 Diabetes',
+                chiefComplaint: 'Sprained my ankle playing tennis this morning. Swelling and pain when walking.',
+                onset: 'today',
+                painLevel: 6,
+                fever: 'no',
+                changesMeds: 'No changes',
+                changesAllergies: 'No',
+                changesOther: 'None'
+            },
+            2: {
+                type: 'returning',
+                firstName: 'James',
+                lastName: 'Thompson',
+                dob: '1978-11-22',
+                phone: '(602) 555-8765',
+                email: 'jthompson@email.com',
+                address: '8890 E Shea Boulevard',
+                city: 'Scottsdale',
+                zipcode: '85260',
+                ethnicity: 'not-hispanic',
+                race: ['white'],
+                emergencyName: 'Susan Thompson',
+                emergencyPhone: '(602) 555-8766',
+                emergencyRelation: 'spouse',
+                allergies: 'None',
+                medications: 'None',
+                conditions: 'None',
+                chiefComplaint: 'Cut my hand while doing yard work. Bleeding has stopped but might need stitches.',
+                onset: 'today',
+                painLevel: 4,
+                fever: 'no',
+                changesMeds: 'No changes',
+                changesAllergies: 'No',
+                changesOther: 'Had tetanus shot 3 years ago'
+            },
+            3: {
+                type: 'returning',
+                firstName: 'Emily',
+                lastName: 'Chen',
+                dob: '1992-07-08',
+                phone: '(480) 555-4321',
+                email: 'echen@email.com',
+                address: '12250 N Frank Lloyd Wright Blvd',
+                city: 'Scottsdale',
+                zipcode: '85259',
+                ethnicity: 'not-hispanic',
+                race: ['asian'],
+                emergencyName: 'David Chen',
+                emergencyPhone: '(480) 555-4322',
+                emergencyRelation: 'spouse',
+                allergies: 'Sulfa drugs',
+                medications: 'Birth control (Lo Loestrin)',
+                conditions: 'Seasonal allergies',
+                chiefComplaint: 'Fever, body aches, sore throat, and cough for 2 days. Tested negative for COVID at home.',
+                onset: '2-3days',
+                painLevel: 3,
+                fever: 'yes',
+                changesMeds: 'Taking OTC ibuprofen and cough syrup',
+                changesAllergies: 'No',
+                changesOther: 'My coworkers have also been sick this week'
+            }
+        };
+
+        function loadDemoPatient(num) {
+            const demo = demoPatients[num];
+            if (!demo) return;
+
+            patientData.type = demo.type;
+            document.querySelector(`input[name="patientType"][value="${demo.type}"]`).checked = true;
+
+            // Fill baseline fields
+            document.getElementById('firstName').value = demo.firstName;
+            document.getElementById('lastName').value = demo.lastName;
+            document.getElementById('dob').value = demo.dob;
+            document.getElementById('phone').value = demo.phone;
+            document.getElementById('email').value = demo.email;
+            document.getElementById('address').value = demo.address;
+            document.getElementById('city').value = demo.city;
+            document.getElementById('zipcode').value = demo.zipcode;
+            document.getElementById('ethnicity').value = demo.ethnicity || '';
+            
+            // Set race checkboxes
+            document.querySelectorAll('input[name="race"]').forEach(cb => {
+                cb.checked = demo.race && demo.race.includes(cb.value);
+            });
+
+            document.getElementById('emergencyName').value = demo.emergencyName;
+            document.getElementById('emergencyPhone').value = demo.emergencyPhone;
+            document.getElementById('emergencyRelation').value = demo.emergencyRelation;
+            document.getElementById('allergies').value = demo.allergies;
+            document.getElementById('medications').value = demo.medications;
+            document.getElementById('conditions').value = demo.conditions;
+
+            // Fill delta fields
+            document.getElementById('chiefComplaint').value = demo.chiefComplaint;
+            document.getElementById('onset').value = demo.onset;
+            document.getElementById('painLevel').value = demo.painLevel;
+            updatePainValue();
+            document.getElementById('fever').value = demo.fever;
+            document.getElementById('changesMeds').value = demo.changesMeds;
+            document.getElementById('changesAllergies').value = demo.changesAllergies;
+            document.getElementById('changesOther').value = demo.changesOther;
+
+            goToStep(2);
+        }
+
+        function handlePatientType() {
+            const type = document.querySelector('input[name="patientType"]:checked').value;
+            patientData.type = type;
+            
+            const uploadSection = document.getElementById('returningPatientUpload');
+            if (type === 'returning') {
+                uploadSection.style.display = 'block';
+            } else {
+                uploadSection.style.display = 'none';
+            }
+        }
+
+        function loadPreviousForm(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    // Load baseline data
+                    if (data.baseline) {
+                        Object.keys(data.baseline).forEach(key => {
+                            const el = document.getElementById(key);
+                            if (el) {
+                                if (el.type === 'checkbox') {
+                                    el.checked = data.baseline[key];
+                                } else {
+                                    el.value = data.baseline[key];
+                                }
+                            }
+                        });
+
+                        // Load race checkboxes
+                        if (data.baseline.race) {
+                            document.querySelectorAll('input[name="race"]').forEach(cb => {
+                                cb.checked = data.baseline.race.includes(cb.value);
+                            });
+                        }
+                    }
+
+                    // Load document data
+                    if (data.documents) {
+                        patientData.documents = data.documents;
+                        
+                        // Show previews for uploaded documents
+                        if (data.documents.insuranceFront) {
+                            showUploadedPreview('insuranceFrontPreview', 'insuranceFrontArea', data.documents.insuranceFront);
+                        }
+                        if (data.documents.insuranceBack) {
+                            showUploadedPreview('insuranceBackPreview', 'insuranceBackArea', data.documents.insuranceBack);
+                        }
+                        if (data.documents.driverLicense) {
+                            showUploadedPreview('driverLicensePreview', 'driverLicenseArea', data.documents.driverLicense);
+                        }
+                    }
+
+                    document.getElementById('previousFormStatus').innerHTML = `
+                        <div class="mt-3 p-3 bg-green-100 border border-green-300 rounded">
+                            <p class="text-sm text-green-900 font-semibold">✓ Form loaded successfully!</p>
+                            <p class="text-xs text-green-800 mt-1">Your information has been pre-filled. You can review and update it.</p>
+                        </div>
+                    `;
+                } catch (error) {
+                    console.error('Error loading form:', error);
+                    document.getElementById('previousFormStatus').innerHTML = `
+                        <div class="mt-3 p-3 bg-red-100 border border-red-300 rounded">
+                            <p class="text-sm text-red-900">Error loading form. Please enter information manually.</p>
+                        </div>
+                    `;
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function showUploadedPreview(previewId, areaId, dataUrl) {
+            const preview = document.getElementById(previewId);
+            const area = document.getElementById(areaId);
+            preview.innerHTML = `<img src="${dataUrl}" alt="Uploaded document">`;
+            preview.style.display = 'block';
+            area.classList.add('has-file');
+        }
+
+        function handleFileUpload(event, previewId, dataKey) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const dataUrl = e.target.result;
+                patientData.documents[dataKey] = dataUrl;
+                
+                const preview = document.getElementById(previewId);
+                const areaId = event.target.id + 'Area';
+                const area = document.getElementById(areaId);
+                
+                preview.innerHTML = `
+                    <img src="${dataUrl}" alt="Uploaded image">
+                    <p class="text-sm text-gray-600 mt-2">✓ Uploaded successfully</p>
+                `;
+                preview.style.display = 'block';
+                area.classList.add('has-file');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function goToStep(step) {
+            // Hide all screens
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById(`screen${i}`).style.display = 'none';
+                document.getElementById(`step${i}`).classList.remove('active');
+            }
+
+            // Show target screen
+            document.getElementById(`screen${step}`).style.display = 'block';
+            document.getElementById(`step${step}`).classList.add('active');
+
+            // Update completed steps
+            for (let i = 1; i < step; i++) {
+                document.getElementById(`step${i}`).classList.add('completed');
+            }
+
+            currentStep = step;
+
+            // Special handling for returning patients
+            if (step === 2 && patientData.type === 'returning') {
+                document.getElementById('profileSubtext').textContent = 
+                    'We have your information on file. Please review and update if anything has changed.';
+            }
+
+            // Set signature date when reaching consent
+            if (step === 5) {
+                const today = new Date().toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                document.getElementById('signatureDate').textContent = today;
+            }
+
+            window.scrollTo(0, 0);
+        }
+
+        function saveBaselineAndContinue() {
+            // Collect baseline data
+            patientData.baseline = {
+                firstName: document.getElementById('firstName').value,
+                lastName: document.getElementById('lastName').value,
+                dob: document.getElementById('dob').value,
+                phone: document.getElementById('phone').value,
+                email: document.getElementById('email').value,
+                address: document.getElementById('address').value,
+                city: document.getElementById('city').value,
+                zipcode: document.getElementById('zipcode').value,
+                ethnicity: document.getElementById('ethnicity').value,
+                race: Array.from(document.querySelectorAll('input[name="race"]:checked')).map(cb => cb.value),
+                emergencyName: document.getElementById('emergencyName').value,
+                emergencyPhone: document.getElementById('emergencyPhone').value,
+                emergencyRelation: document.getElementById('emergencyRelation').value,
+                allergies: document.getElementById('allergies').value,
+                medications: document.getElementById('medications').value,
+                conditions: document.getElementById('conditions').value
+            };
+
+            // Basic validation
+            if (!patientData.baseline.firstName || !patientData.baseline.lastName || 
+                !patientData.baseline.dob || !patientData.baseline.phone) {
+                alert('Please fill in all required fields (marked with *)');
+                return;
+            }
+
+            goToStep(3);
+        }
+
+        function updatePainValue() {
+            const value = document.getElementById('painLevel').value;
+            document.getElementById('painValue').textContent = value;
+        }
+
+        function toggleExpand(id) {
+            const element = document.getElementById(id);
+            element.classList.toggle('show');
+        }
+
+        function generateCheckInCode() {
+            // Collect delta data
+            patientData.delta = {
+                chiefComplaint: document.getElementById('chiefComplaint').value,
+                onset: document.getElementById('onset').value,
+                painLevel: document.getElementById('painLevel').value,
+                fever: document.getElementById('fever').value,
+                changesMeds: document.getElementById('changesMeds').value,
+                changesAllergies: document.getElementById('changesAllergies').value,
+                changesOther: document.getElementById('changesOther').value
+            };
+
+            // Collect red flags
+            patientData.redFlags = [];
+            if (document.getElementById('chestPain').checked) patientData.redFlags.push('Chest pain/difficulty breathing');
+            if (document.getElementById('severeHeadache').checked) patientData.redFlags.push('Severe headache');
+            if (document.getElementById('confusion').checked) patientData.redFlags.push('Confusion/altered consciousness');
+            if (document.getElementById('bleeding').checked) patientData.redFlags.push('Heavy bleeding');
+            if (document.getElementById('pregnant').checked) patientData.redFlags.push('Pregnancy complications');
+
+            // Collect consent
+            patientData.consent = {
+                agreed: document.getElementById('consentCheck').checked,
+                signatureName: document.getElementById('signatureName').value,
+                signatureDate: document.getElementById('signatureDate').textContent,
+                timestamp: new Date().toISOString()
+            };
+
+            // Validation
+            if (!patientData.consent.agreed || !patientData.consent.signatureName) {
+                alert('Please check the consent box and provide your signature');
+                return;
+            }
+
+            // Generate check-in code (6-character alphanumeric)
+            const checkInCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+            patientData.checkInCode = checkInCode;
+            patientData.createdAt = new Date().toISOString();
+            patientData.expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min
+
+            // Store in localStorage
+            localStorage.setItem(`intake_${checkInCode}`, JSON.stringify(patientData));
+
+            // Display code
+            document.getElementById('checkinCodeDisplay').textContent = checkInCode;
+
+            // Generate QR code
+            const qrcodeDiv = document.getElementById('qrcode');
+            qrcodeDiv.innerHTML = ''; // Clear previous
+            new QRCode(qrcodeDiv, {
+                text: `HONORHEALTH-${checkInCode}`,
+                width: 200,
+                height: 200
+            });
+
+            goToStep(6);
+        }
+
+        // Enable sign button when consent is checked and name is entered
+        document.addEventListener('DOMContentLoaded', function() {
+            const consentCheck = document.getElementById('consentCheck');
+            const signatureName = document.getElementById('signatureName');
+            const signBtn = document.getElementById('signBtn');
+
+            function checkSignReady() {
+                if (consentCheck && signatureName && signBtn) {
+                    signBtn.disabled = !(consentCheck.checked && signatureName.value.trim().length > 0);
+                }
+            }
+
+            if (consentCheck) consentCheck.addEventListener('change', checkSignReady);
+            if (signatureName) signatureName.addEventListener('input', checkSignReady);
+        });
+
+        function toggleLargeText() {
+            document.body.classList.toggle('large-text');
+        }
+
+        // Download form data as JSON
+        function downloadFormData() {
+            const dataStr = JSON.stringify(patientData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `HonorHealth_CheckIn_${patientData.baseline.lastName}_${patientData.checkInCode}_${Date.now()}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Download PDF summary
+        function downloadPDFSummary() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const p = patientData;
+
+            // Header
+            doc.setFontSize(20);
+            doc.setTextColor(0, 102, 204);
+            doc.text('HonorHealth Urgent Care', 20, 20);
+            
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0);
+            doc.text('Patient Check-In Summary', 20, 30);
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 37);
+
+            // Patient Info
+            let y = 50;
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text('Patient Information', 20, y);
+            
+            y += 10;
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Name: ${p.baseline.firstName} ${p.baseline.lastName}`, 20, y);
+            y += 7;
+            doc.text(`DOB: ${p.baseline.dob}`, 20, y);
+            y += 7;
+            doc.text(`Phone: ${p.baseline.phone}`, 20, y);
+            y += 7;
+            doc.text(`Email: ${p.baseline.email}`, 20, y);
+            y += 7;
+            doc.text(`Check-In Code: ${p.checkInCode}`, 20, y);
+
+            // Red Flags
+            if (p.redFlags && p.redFlags.length > 0) {
+                y += 15;
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.setTextColor(239, 68, 68);
+                doc.text('⚠ RED FLAGS - PRIORITY', 20, y);
+                
+                y += 10;
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'normal');
+                p.redFlags.forEach(flag => {
+                    doc.text(`• ${flag}`, 25, y);
+                    y += 7;
+                });
+                doc.setTextColor(0, 0, 0);
+            }
+
+            // Chief Complaint
+            y += 10;
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text('Chief Complaint', 20, y);
+            
+            y += 10;
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'normal');
+            const complaint = doc.splitTextToSize(p.delta.chiefComplaint, 170);
+            doc.text(complaint, 20, y);
+            y += complaint.length * 7;
+
+            // Save
+            const filename = `HonorHealth_CheckIn_${p.baseline.lastName}_${p.checkInCode}.pdf`;
+            doc.save(filename);
+        }
+
+        // Email functionality
+        function showEmailModal() {
+            document.getElementById('emailModal').classList.add('show');
+            document.getElementById('emailRecipient').value = patientData.baseline.email || '';
+            document.getElementById('emailStatus').style.display = 'none';
+        }
+
+        function closeEmailModal() {
+            document.getElementById('emailModal').classList.remove('show');
+            document.getElementById('emailStatus').style.display = 'none';
+        }
+
+        function sendEmailSummary() {
+            const email = document.getElementById('emailRecipient').value;
+            const statusDiv = document.getElementById('emailStatus');
+            const sendBtn = document.getElementById('sendEmailBtn');
+            
+            if (!email || !email.includes('@')) {
+                statusDiv.innerHTML = `
+                    <div class="bg-red-50 border border-red-300 rounded p-3 text-sm text-red-800">
+                        ⚠ Please enter a valid email address
+                    </div>
+                `;
+                statusDiv.style.display = 'block';
+                return;
+            }
+
+            // Disable button and show loading
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+
+            // Simulate email sending (in production, this would call a backend API)
+            setTimeout(() => {
+                // Create email content
+                const subject = `HonorHealth Check-In - ${patientData.baseline.firstName} ${patientData.baseline.lastName}`;
+                const body = `
+Your HonorHealth Urgent Care Check-In Summary
+
+CHECK-IN CODE: ${patientData.checkInCode}
+(Show this code at the front desk)
+
+Patient: ${patientData.baseline.firstName} ${patientData.baseline.lastName}
+Date: ${new Date().toLocaleDateString()}
+Time: ${new Date().toLocaleTimeString()}
+
+Chief Complaint: ${patientData.delta.chiefComplaint}
+
+Estimated Wait Time: 15-30 minutes
+
+${patientData.redFlags.length > 0 ? '⚠ RED FLAGS: ' + patientData.redFlags.join(', ') : ''}
+
+Your complete check-in form has been attached.
+Save this file to auto-fill your information on your next visit!
+
+---
+HonorHealth Scottsdale Urgent Care
+                `.trim();
+
+                // For demo purposes, create a mailto link
+                // In production, this would be a backend API call
+                const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                
+                statusDiv.innerHTML = `
+                    <div class="bg-green-50 border border-green-400 rounded p-3 text-sm text-green-800">
+                        ✓ Email sent successfully to ${email}!
+                        <p class="mt-2 text-xs">Check your inbox in a few moments.</p>
+                    </div>
+                `;
+                statusDiv.style.display = 'block';
+
+                // Open mailto as fallback for demo
+                window.open(mailtoLink, '_blank');
+
+                // Auto-download the JSON form
+                downloadFormData();
+
+                // Reset button and close modal after 2 seconds
+                setTimeout(() => {
+                    sendBtn.disabled = false;
+                    sendBtn.textContent = 'Send Email';
+                    closeEmailModal();
+                }, 2000);
+            }, 1500);
+        }
+    </script>
+</body>
+</html>
